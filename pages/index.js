@@ -1,118 +1,249 @@
-import Image from "next/image";
-import { Inter } from "next/font/google";
+// pages/index.js
+import React, { useEffect, useRef, useState } from 'react'
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai"
+import ReactPlayer from 'react-player'
+const tokenizer = require('sbd')
 
-const inter = Inter({ subsets: ["latin"] });
+// const MODEL_NAME = "gemini-1.5-pro-latest"
+const MODEL_NAME = "gemini-1.0-pro"
+const KKK = Buffer.from("QUl6YVN5QnN3WWhrQmZmZlRoMHM1dkpOTEo3enlia096OHVrbFFz", 'base64')
+
+// const generationConfig = {
+//   temperature: 1,
+//   topK: 0,
+//   topP: 0.95,
+//   maxOutputTokens: 8192,
+// }
+const generationConfig = {
+  temperature: 0.9,
+  topK: 0,
+  topP: 1,
+  // maxOutputTokens: 2048,
+  maxOutputTokens: 200,
+}
+
+const safetySettings = [
+  {
+    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+]
+
+const sentenceSplitterOpt = {
+  "newline_boundaries" : true,
+  "html_boundaries"    : false,
+  "sanitize"           : true,
+  "allowed_tags"       : false,
+  "preserve_whitespace" : false,
+  "abbreviations"      : null
+}
 
 export default function Home() {
+  const [userInput, setUserInput] = useState('')
+  const [messages, setMessages] = useState([])
+  const [avatarState, setAvatarState] = useState('idle')
+  const [avatarActiveVid, setAvatarActiveVid] = useState('')
+  const playerRef = useRef(null)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+
+    setMessages([...messages, { role: 'user', content: userInput }])
+
+    const genAI = new GoogleGenerativeAI(KKK)
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME })
+
+    const chat = model.startChat({
+      generationConfig,
+      safetySettings,
+      history: [
+        {
+          role: "user",
+          parts: [{ text: "Bisakah kamu menjadi temanku dan membantu menjawab pertanyaan ku?" }],
+        },
+        {
+          role: "model",
+          parts: [{ text: "Tentu saja!, silakahkan bertanya." }],
+        },
+        {
+          role: "user",
+          parts: [{ text: "Jawab pertanyaanku dengan singkat saja ya, dan dalam perspektif orang pertama." }],
+        },
+        {
+          role: "model",
+          parts: [{ text: "Tentu saja, aku akan mencobanya" }],
+        },
+      ],
+    })
+
+    const result = await chat.sendMessage(userInput)
+    const response = result.response
+
+    setMessages([...messages, { role: 'user', content: userInput }, { role: 'gemini', content: response.text() }])
+
+    const container = document.getElementsByClassName('chat-container')
+    container.scrollTop = container.scrollHeight
+
+    setUserInput('')
+
+    nativeSpeak(response.text())
+  }
+
+  useEffect(() => {
+    if (avatarState === "idle") {
+      setAvatarActiveVid('/videos/ai-idle.m3u8')
+    } else if (avatarState === "talk") {
+      setAvatarActiveVid('/videos/ai-talk.m3u8')
+    } else {
+      setAvatarActiveVid('/videos/ai-idle.m3u8')
+    }
+  }, [avatarState])
+
+  var synth
+  const [voices, setVoices] = useState([])
+  if (typeof(window) !== 'undefined') {
+    synth = window.speechSynthesis
+    synth.onvoiceschanged = () => {
+      var tmpVoices = synth.getVoices()
+      setVoices(tmpVoices)
+    }
+  }
+
+  function nativeSpeak(text) {
+    if (text === "") { return }
+    setAvatarState("talk")
+    synth.cancel()
+
+    var sentences = tokenizer.sentences(text, sentenceSplitterOpt)
+
+    text = removeEmoticons(text)
+
+    sentences.forEach((sentence, idx) => {
+      iterateArrayInBatches(`${sentence}`.split(' '), 26, function(batch) {
+        var joinedText = batch.join(" ")
+        let speech = new SpeechSynthesisUtterance()
+        speech.voice = getIDVoice()
+        speech.lang = "id-ID"
+        speech.text = joinedText
+        speech.rate = 1.4
+        speech.pitch = 1.5
+        speech.volume = 1
+        if (idx >= sentences.length-1) {
+          speech.onend = () => {setAvatarState("idle")}
+        }
+        synth.speak(speech)
+      })
+    })
+  }
+
+  function getIDVoice() {
+    voices.forEach((v)=>{
+      if (v.lang === "id-ID") {
+        return v
+      }
+    })
+  }
+
   return (
-    <main
-      className={`flex min-h-screen flex-col items-center justify-between p-24 ${inter.className}`}
-    >
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">pages/index.js</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
+    <div className="container mx-auto p-4">
+      <h1 className="text-3xl font-bold mb-4">Neng-Gemini</h1>
+
+      <div className='flex gap-1'>
+        <div className='w-full'>
+          <div className='w-full rounded-lg overflow-hidden border border-black'>
+            {avatarActiveVid !== '' && <ReactPlayer
+              ref={playerRef}
+              onReady={()=>{
+              }}
+              url={avatarActiveVid}
+              width={"100%"}
+              height={"100%"}
+              playing={true}
+              loop={true}
+            />}
+          </div>
+        </div>
+
+        <div className='w-full max-w-xs'>
+          <div id="chatbox" className="chat-container h-96 overflow-y-auto p-4 bg-gray-100 rounded-lg">
+            {messages.map((message, index) => (
+              <div
+                key={index+message}
+                className={`text-black chat-message mb-2 ${
+                  message.role === 'user' ? 'text-right text-blue-500' : 'text-left text-black'
+                }`}
+              >
+                <p>
+                  <span className="font-bold">{message.role}</span>
+                </p>
+                <p className='text-xs'>
+                  {message.content}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <form onSubmit={handleSubmit} className="flex mt-4">
+            <input
+              type="text"
+              className="flex-grow border border-gray-300 rounded-l-md p-2 focus:outline-none"
+              placeholder="Type your message..."
+              value={userInput}
+              onChange={(e) => setUserInput(e.target.value)}
             />
-          </a>
+            <button
+              type="submit"
+              className="bg-blue-500 text-white rounded-r-md px-4 py-2 hover:bg-blue-600"
+            >
+              Send
+            </button>
+          </form>
+
+          <div className='flex flex-col gap-1 mt-2 text-black'>
+            {voices.map((v, idx)=>(
+              v.lang !== "id-ID" ? null :
+              <div className='bg-white rounded-lg p-1' key={v.lang+v.name}>
+                {idx}: {v.lang} - {v.name}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
+    </div>
+  )
 
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-full sm:before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full sm:after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700/10 after:dark:from-sky-900 after:dark:via-[#0141ff]/40 before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
+  function iterateArrayInBatches(array, batchSize, callback) {
+    for (let i = 0; i < array.length; i += batchSize) {
+      const batch = array.slice(i, i + batchSize);
+      callback(batch);
+    }
+  }
 
-      <div className="mb-32 grid text-center lg:max-w-5xl lg:w-full lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
+  function removeEmoticons(text) {
+    // Regular expression to match most emoticons (including variations with noses, etc.)
+    const emoticonRegex = /[:;8=xX]['"`^]?[-o\*\^]?[\)\]\(\[dDpP\/\\|@3<>]/g;
 
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
+    // Replace matched emoticons with an empty string
+    return removeEmojis(text.replace(emoticonRegex, ''));
+  }
 
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Discover and deploy boilerplate example Next.js&nbsp;projects.
-          </p>
-        </a>
+  function removeEmojis(text) {
+    // Use a regular expression to match Unicode characters in the emoji range
+    const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F1E0}-\u{1F1FF}]/gu;
 
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50 text-balance`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
-  );
+    // Replace matched emojis with an empty string
+    return text.replace(emojiRegex, '');
+  }
 }
