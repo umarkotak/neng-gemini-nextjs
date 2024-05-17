@@ -1,7 +1,11 @@
+'use client'
+
 // pages/index.js
 import React, { useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai"
 import ReactPlayer from 'react-player'
+const ReactPlayerCsr = dynamic(() => import('./ReactPlayerCsr'), { ssr: false })
 const tokenizer = require('sbd')
 
 // const MODEL_NAME = "gemini-1.5-pro-latest"
@@ -56,11 +60,12 @@ export default function Home() {
   const [avatarState, setAvatarState] = useState('idle')
   const [avatarActiveVid, setAvatarActiveVid] = useState('')
   const playerRef = useRef(null)
+  const [playing, setPlaying] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    setMessages([...messages, { role: 'user', content: userInput }])
+    setMessages([{ role: 'user', content: userInput }, ...messages])
 
     const genAI = new GoogleGenerativeAI(KKK)
     const model = genAI.getGenerativeModel({ model: MODEL_NAME })
@@ -91,7 +96,7 @@ export default function Home() {
     const result = await chat.sendMessage(userInput)
     const response = result.response
 
-    setMessages([...messages, { role: 'user', content: userInput }, { role: 'gemini', content: response.text() }])
+    setMessages([{ role: 'gemini', content: response.text() }, { role: 'user', content: userInput }, ...messages])
 
     const container = document.getElementsByClassName('chat-container')
     container.scrollTop = container.scrollHeight
@@ -122,6 +127,8 @@ export default function Home() {
   }
 
   function nativeSpeak(text) {
+    setPlaying(true)
+
     if (text === "") { return }
     setAvatarState("talk")
     synth.cancel()
@@ -158,25 +165,59 @@ export default function Home() {
 
   return (
     <div className="container mx-auto p-4">
-      <h1 className="text-3xl font-bold mb-4">Neng-Gemini</h1>
+      {/* <h1 className="text-3xl font-bold mb-4">Neng-Gemini</h1> */}
 
-      <div className='flex gap-1'>
-        <div className='w-full'>
+      <div className='flex flex-col lg:flex-row gap-1'>
+        <div className='w-full mb-2'>
           <div className='w-full rounded-lg overflow-hidden border border-black'>
-            {avatarActiveVid !== '' && <ReactPlayer
+            {/* {avatarActiveVid !== '' && <ReactPlayer
               ref={playerRef}
               onReady={()=>{
               }}
               url={avatarActiveVid}
               width={"100%"}
               height={"100%"}
-              playing={true}
+              playing={playing}
               loop={true}
-            />}
+            />} */}
+            <div className={avatarState === 'talk' ? 'hidden' : 'block'}>
+              <ReactPlayerCsr
+                url={'/videos/ai-idle.m3u8'}
+                width={"100%"}
+                height={"100%"}
+                playing={playing}
+                loop={true}
+              />
+            </div>
+            <div className={avatarState === 'talk' ? 'block' : 'hidden'}>
+              <ReactPlayerCsr
+                url={'/videos/ai-talk.m3u8'}
+                width={"100%"}
+                height={"100%"}
+                playing={playing}
+                loop={true}
+              />
+            </div>
           </div>
         </div>
 
-        <div className='w-full max-w-xs'>
+        <div className='w-full lg:max-w-xs'>
+          <form onSubmit={handleSubmit} className="flex mb-2">
+            <input
+              type="text"
+              className="flex-grow border border-gray-300 rounded-l-md p-2 focus:outline-none"
+              placeholder="Type your message..."
+              value={userInput}
+              onChange={(e) => setUserInput(e.target.value)}
+            />
+            <button
+              type="submit"
+              className="bg-blue-500 text-white rounded-r-md px-4 py-2 hover:bg-blue-600"
+            >
+              Send
+            </button>
+          </form>
+
           <div id="chatbox" className="chat-container h-96 overflow-y-auto p-4 bg-gray-100 rounded-lg">
             {messages.map((message, index) => (
               <div
@@ -195,29 +236,13 @@ export default function Home() {
             ))}
           </div>
 
-          <form onSubmit={handleSubmit} className="flex mt-4">
-            <input
-              type="text"
-              className="flex-grow border border-gray-300 rounded-l-md p-2 focus:outline-none"
-              placeholder="Type your message..."
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-            />
-            <button
-              type="submit"
-              className="bg-blue-500 text-white rounded-r-md px-4 py-2 hover:bg-blue-600"
-            >
-              Send
-            </button>
-          </form>
-
           <div className='flex flex-col gap-1 mt-2 text-black'>
-            {voices.map((v, idx)=>(
+            {/* {voices.map((v, idx)=>(
               v.lang !== "id-ID" ? null :
               <div className='bg-white rounded-lg p-1' key={v.lang+v.name}>
                 {idx}: {v.lang} - {v.name}
               </div>
-            ))}
+            ))} */}
           </div>
         </div>
       </div>
