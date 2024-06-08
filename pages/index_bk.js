@@ -1,10 +1,9 @@
 'use client'
 
+// pages/index.js
 import React, { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai"
-import 'regenerator-runtime/runtime'
-import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition'
 import ReactPlayer from 'react-player'
 const ReactPlayerCsr = dynamic(() => import('./ReactPlayerCsr'), { ssr: false })
 const tokenizer = require('sbd')
@@ -24,7 +23,7 @@ const generationConfig = {
   topK: 0,
   topP: 1,
   // maxOutputTokens: 2048,
-  maxOutputTokens: 256,
+  maxOutputTokens: 200,
 }
 
 const safetySettings = [
@@ -55,26 +54,7 @@ const sentenceSplitterOpt = {
   "abbreviations"      : null
 }
 
-var chatHistories = [
-  {
-    role: "user",
-    parts: [{ text: "Bisakah kamu menjadi temanku dan membantu menjawab pertanyaan ku? Jawab dengan singkat dan dalam perspektif orang pertama. Jawab tanpa menggunakan markdown special karakter." }],
-  },
-  {
-    role: "model",
-    parts: [{ text: "Tentu saja!, saya akan memberikan jawaban berupa plain text." }],
-  },
-  // {
-  //   role: "user",
-  //   parts: [{ text: "Jawab pertanyaanku dengan singkat saja ya, dan dalam perspektif orang pertama." }],
-  // },
-  // {
-  //   role: "model",
-  //   parts: [{ text: "Tentu saja, aku akan mencobanya" }],
-  // },
-]
-
-export default function Home() {
+export default function HomeBk() {
   const [userInput, setUserInput] = useState('')
   const [messages, setMessages] = useState([])
   const [avatarState, setAvatarState] = useState('idle')
@@ -82,15 +62,10 @@ export default function Home() {
   const playerRef = useRef(null)
   const [playing, setPlaying] = useState(false)
 
-  const handleSubmit = async () => {
-    processText(userInput)
-  }
+  const handleSubmit = async (e) => {
+    e.preventDefault()
 
-  async function processText(t) {
-    setPlaying(true)
-    setUserInput('')
-    resetTranscript()
-    setMessages([{ role: 'user', content: t }, ...messages])
+    setMessages([{ role: 'user', content: userInput }, ...messages])
 
     const genAI = new GoogleGenerativeAI(KKK)
     const model = genAI.getGenerativeModel({ model: MODEL_NAME })
@@ -98,21 +73,37 @@ export default function Home() {
     const chat = model.startChat({
       generationConfig,
       safetySettings,
-      history: chatHistories,
+      history: [
+        {
+          role: "user",
+          parts: [{ text: "Bisakah kamu menjadi temanku dan membantu menjawab pertanyaan ku?" }],
+        },
+        {
+          role: "model",
+          parts: [{ text: "Tentu saja!, silakahkan bertanya." }],
+        },
+        {
+          role: "user",
+          parts: [{ text: "Jawab pertanyaanku dengan singkat saja ya, dan dalam perspektif orang pertama." }],
+        },
+        {
+          role: "model",
+          parts: [{ text: "Tentu saja, aku akan mencobanya" }],
+        },
+      ],
     })
 
-    const result = await chat.sendMessage(t)
+    const result = await chat.sendMessage(userInput)
     const response = result.response
 
-    var textResult = response.text()
-    textResult = textResult.replaceAll("*","")
-
-    setMessages([{ role: 'gemini', content: textResult }, { role: 'user', content: t }, ...messages])
+    setMessages([{ role: 'gemini', content: response.text() }, { role: 'user', content: userInput }, ...messages])
 
     const container = document.getElementsByClassName('chat-container')
     container.scrollTop = container.scrollHeight
 
-    nativeSpeak(textResult)
+    setUserInput('')
+
+    nativeSpeak(response.text())
   }
 
   useEffect(() => {
@@ -172,24 +163,24 @@ export default function Home() {
     })
   }
 
-  const commands = [
-    {
-      command: ':content (*)',
-      callback: (content, c2) => {
-        setUserInput(`${content} ${c2}`)
-        processText(`${content} ${c2}`)
-      },
-      matchInterim: false,
-    },
-  ]
-  const {transcript, listening, resetTranscript, browserSupportsSpeechRecognition} = useSpeechRecognition({commands})
-
   return (
-    <div className="container mx-auto w-full max-w-lg p-2">
-      <div className='flex flex-col gap-1'>
+    <div className="container mx-auto p-4">
+      {/* <h1 className="text-3xl font-bold mb-4">Neng-Gemini</h1> */}
+
+      <div className='flex flex-col lg:flex-row gap-1'>
         <div className='w-full mb-2'>
-          <div className='w-full rounded-lg overflow-hidden border border-black relative'>
-            <div className={`scale-150`}>
+          <div className='w-full rounded-lg overflow-hidden border border-black'>
+            {/* {avatarActiveVid !== '' && <ReactPlayer
+              ref={playerRef}
+              onReady={()=>{
+              }}
+              url={avatarActiveVid}
+              width={"100%"}
+              height={"100%"}
+              playing={playing}
+              loop={true}
+            />} */}
+            <div className={avatarState === 'talk' ? 'hidden' : 'block'}>
               <ReactPlayerCsr
                 url={'/videos/ai-idle.m3u8'}
                 width={"100%"}
@@ -198,7 +189,7 @@ export default function Home() {
                 loop={true}
               />
             </div>
-            <div className={`scale-150 absolute top-0 transition-opacity ease-in duration-700 ${avatarState === 'talk' ? 'opacity-100' : 'opacity-0'}`}>
+            <div className={avatarState === 'talk' ? 'block' : 'hidden'}>
               <ReactPlayerCsr
                 url={'/videos/ai-talk.m3u8'}
                 width={"100%"}
@@ -210,41 +201,24 @@ export default function Home() {
           </div>
         </div>
 
-        <div className='w-full'>
+        <div className='w-full lg:max-w-xs'>
           <form onSubmit={handleSubmit} className="flex mb-2">
             <input
               type="text"
-              className="input input-bordered w-full input-sm"
+              className="flex-grow border border-gray-300 rounded-l-md p-2 focus:outline-none"
               placeholder="Type your message..."
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
             />
             <button
-              type='button'
-              className="btn btn-primary btn-outline btn-sm"
-              onClick={()=>SpeechRecognition.startListening({ language: 'id' })}
+              type="submit"
+              className="bg-blue-500 text-white rounded-r-md px-4 py-2 hover:bg-blue-600"
             >
-              {!listening ? "🎙️ Speak" : "Listening"}
+              Send
             </button>
           </form>
 
-          <div id="chatbox" className="chat-container h-96 overflow-y-auto p-4 bg-green-200 rounded-lg">
-            {transcript && transcript !== "" && <>
-              <div
-                className={`text-black chat-message mb-2 ${
-                  'text-right text-blue-500'
-                }`}
-              >
-                <p>
-                  <span className="font-bold">user</span>
-                </p>
-                <div className={'flex justify-end'}>
-                  <p className='text-xs bg-white p-2 rounded-lg max-w-xs shadow-sm'>
-                    {transcript}
-                  </p>
-                </div>
-              </div>
-            </>}
+          <div id="chatbox" className="chat-container h-96 overflow-y-auto p-4 bg-gray-100 rounded-lg">
             {messages.map((message, index) => (
               <div
                 key={index+message}
@@ -255,11 +229,9 @@ export default function Home() {
                 <p>
                   <span className="font-bold">{message.role}</span>
                 </p>
-                <div className={message.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
-                  <p className='text-xs bg-white p-2 rounded-lg max-w-xs shadow-sm'>
-                    {message.content}
-                  </p>
-                </div>
+                <p className='text-xs'>
+                  {message.content}
+                </p>
               </div>
             ))}
           </div>
