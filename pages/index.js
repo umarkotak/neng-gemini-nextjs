@@ -82,7 +82,7 @@ export default function Home() {
   const playerRef = useRef(null)
   const [playing, setPlaying] = useState(false)
 
-  const handleSubmit = async () => {
+  async function handleSubmit() {
     processText(userInput)
   }
 
@@ -184,35 +184,66 @@ export default function Home() {
   ]
   const {transcript, listening, resetTranscript, browserSupportsSpeechRecognition} = useSpeechRecognition({commands})
 
+  useEffect(() => {
+    const listener = event => {
+      if (event.code === "Enter" || event.code === "NumpadEnter") {
+        event.preventDefault()
+        processText(document.getElementById("input_params").value)
+      }
+    }
+    document.addEventListener("keydown", listener)
+    return () => {
+      document.removeEventListener("keydown", listener)
+    }
+  }, [])
+
+  function startListening() {
+    synth.cancel()
+    setAvatarState("idle")
+    SpeechRecognition.startListening({ language: 'id' })
+  }
+
+  var vidHeight = "600px"
+
   return (
     <div className="container mx-auto w-full max-w-lg p-2">
       <div className='flex flex-col gap-1'>
         <div className='w-full mb-2'>
-          <div className='w-full rounded-lg overflow-hidden border border-black relative'>
-            <div className={`scale-150`}>
+          <div className='w-full rounded-lg overflow-hidden border border-black relative h-[600px]'>
+            <div className={`scale-[2.8]`}>
               <ReactPlayerCsr
                 url={'/videos/ai-idle.m3u8'}
                 width={"100%"}
-                height={"100%"}
+                height={vidHeight}
                 playing={playing}
                 loop={true}
               />
             </div>
-            <div className={`scale-150 absolute top-0 transition-opacity ease-in duration-700 ${avatarState === 'talk' ? 'opacity-100' : 'opacity-0'}`}>
+            <div className={`scale-[2.8] absolute top-0 transition-opacity ease-in duration-700 ${avatarState === 'talk' ? 'opacity-100' : 'opacity-0'}`}>
               <ReactPlayerCsr
                 url={'/videos/ai-talk.m3u8'}
                 width={"100%"}
-                height={"100%"}
+                height={vidHeight}
                 playing={playing}
                 loop={true}
               />
+            </div>
+            <div className='absolute bottom-2 right-2'>
+              <button
+                type='button'
+                className="btn btn-error btn-lg text-white"
+                onClick={()=>startListening()}
+              >
+                {!listening ? "🗣️ Speak" : "🦻🏻 Listening"}
+              </button>
             </div>
           </div>
         </div>
 
         <div className='w-full'>
-          <form onSubmit={handleSubmit} className="flex mb-2">
+          {/* <div className="flex mb-2">
             <input
+              id="input_params"
               type="text"
               className="input input-bordered w-full input-sm"
               placeholder="Type your message..."
@@ -222,11 +253,11 @@ export default function Home() {
             <button
               type='button'
               className="btn btn-primary btn-outline btn-sm"
-              onClick={()=>SpeechRecognition.startListening({ language: 'id' })}
+              onClick={()=>startListening()}
             >
               {!listening ? "🎙️ Speak" : "Listening"}
             </button>
-          </form>
+          </div> */}
 
           <div id="chatbox" className="chat-container h-96 overflow-y-auto p-4 bg-green-200 rounded-lg">
             {transcript && transcript !== "" && <>
