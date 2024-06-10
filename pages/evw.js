@@ -386,6 +386,9 @@ export default function Evw() {
 
   async function ApiFetchLiveEventDetail(slug) {
     var uri = new URL(`http://${window.location.host}/api/gostream/api/v2/event_detail/${slug}`)
+    if (!window.location.host.includes("localhost")) {
+      uri = new URL(`https://${window.location.host}/api/gostream/api/v2/event_detail/${slug}`)
+    }
     uri.search = new URLSearchParams({}).toString()
     var response = await fetch(uri, {method: "GET", headers: {"Content-Type": "application/json"}})
     return response
