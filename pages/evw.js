@@ -80,6 +80,7 @@ export default function Evw() {
   const [connState, setConnState] = useState("initializing")
   const [playing, setPlaying] = useState(false)
   const searchParams = useSearchParams()
+  const [chatReady, setChatReady] = useState(false)
 
   var isGenaiAsking = false
   async function ProcessMessage(msg) {
@@ -302,6 +303,8 @@ export default function Evw() {
         var parsedData = JSON.parse(data)
         if (!parsedData) { return }
         if (parsedData.ct === 20) {
+          setChatReady(true)
+
           if (!appStarted) {
             return
           }
@@ -346,13 +349,17 @@ export default function Evw() {
             </div>
             <div className='absolute top-2 right-2'>
               <div className='flex gap-2'>
-                {!playing && <div className='bg-white p-2 rounded-lg' onClick={()=>{
-                  setPlaying(true)
-                  appStarted=true
+                {!playing && !liveEventDetail.id && <button className='btn btn-primary btn-outline btn-sm' onClick={()=>{
                   InitApp()
                 }}>
                   Start
-                </div>}
+                </button>}
+                {!playing && chatReady && <button className='btn btn-primary btn-outline btn-sm' onClick={()=>{
+                  setPlaying(true)
+                  appStarted=true
+                }}>
+                  Ready
+                </button>}
                 {/* <div className='bg-white p-2 rounded-lg'>
                   {avatarState} - {connState}
                 </div> */}
