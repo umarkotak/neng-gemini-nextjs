@@ -101,10 +101,13 @@ export default function Evw() {
       const result = await chat.sendMessage(msg)
       const response = result.response
 
-      allChats = [{ role: 'gemini', content: response.text() }, ...allChats]
+      var textResult = response.text()
+      textResult = textResult.replaceAll("*","")
+
+      allChats = [{ role: 'gemini', content: textResult }, ...allChats]
       setMessages(allChats)
 
-      nativeSpeak(response.text())
+      nativeSpeak(textResult)
     } catch(e) {
       setConnState(`calling gemini - fail: ${e}`)
       isGenaiAsking = false
