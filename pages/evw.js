@@ -1,15 +1,19 @@
-// pages/index.js
+'use client'
+
 import React, { useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai"
+import 'regenerator-runtime/runtime'
+import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition'
 import ReactPlayer from 'react-player'
+import { useSearchParams } from 'next/navigation'
+const ReactPlayerCsr = dynamic(() => import('./ReactPlayerCsr'), { ssr: false })
 const tokenizer = require('sbd')
 
 // const MODEL_NAME = "gemini-1.5-pro-latest"
 const MODEL_NAME = "gemini-1.0-pro"
 const KKK = Buffer.from("QUl6YVN5QnN3WWhrQmZmZlRoMHM1dkpOTEo3enlia096OHVrbFFz", 'base64')
-const EVW_HOST = "http://api.everywhere.id"
-// const SLUG = "play-everywhere-prima-napitupulu-wrx"
-const SLUG = "neng-gemini"
+const DEFAULT_SLUG = "neng-gemini"
 const SPEECH_RATE = 1
 const SPEECH_PITCH = 1.4
 
@@ -55,72 +59,54 @@ const sentenceSplitterOpt = {
   "abbreviations"      : null
 }
 
+var allChats = []
+var appStarted = false
+
+var chatHistories = [
+  {
+    role: "user",
+    parts: [{ text: "Bisakah kamu menjadi temanku dan membantu menjawab pertanyaan ku? Jawab dengan singkat dan dalam perspektif orang pertama. Jawab tanpa menggunakan markdown special karakter." }],
+  },
+  {
+    role: "model",
+    parts: [{ text: "Tentu saja!, saya akan memberikan jawaban berupa plain text." }],
+  },
+]
+
 export default function Evw() {
-  const [userInput, setUserInput] = useState('')
   const [messages, setMessages] = useState([])
   const [avatarState, setAvatarState] = useState('idle')
   const [avatarActiveVid, setAvatarActiveVid] = useState('')
-  const playerRef = useRef(null)
   const [connState, setConnState] = useState("initializing")
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-
-    submitMessage(userInput)
-
-    setUserInput('')
-  }
+  const [playing, setPlaying] = useState(false)
+  const searchParams = useSearchParams()
 
   var isGenaiAsking = false
-  const submitMessage = async (textInput) => {
-    // return
-
+  async function ProcessMessage(msg) {
     if (isGenaiAsking) { return }
     isGenaiAsking = true
 
     try {
-      console.warn("ASKING", textInput)
-
-      setMessages([...messages, { role: 'user', content: textInput }])
-
       const genAI = new GoogleGenerativeAI(KKK)
       const model = genAI.getGenerativeModel({ model: MODEL_NAME })
 
       const chat = model.startChat({
         generationConfig,
         safetySettings,
-        history: [
-          {
-            role: "user",
-            parts: [{ text: "Bisakah kamu menjadi temanku dan membantu menjawab pertanyaan ku?" }],
-          },
-          {
-            role: "model",
-            parts: [{ text: "Tentu saja!, silakahkan bertanya." }],
-          },
-          {
-            role: "user",
-            parts: [{ text: "Jawab pertanyaanku dengan singkat saja ya, dan dalam perspektif orang pertama." }],
-          },
-          {
-            role: "model",
-            parts: [{ text: "Tentu saja, aku akan mencobanya" }],
-          },
-        ],
+        history: chatHistories,
       })
 
       setConnState("calling gemini")
-      const result = await chat.sendMessage(textInput)
+      const result = await chat.sendMessage(msg)
       const response = result.response
 
-      setMessages([...messages, { role: 'user', content: textInput }, { role: 'gemini', content: response.text() }])
-
-      const container = document.getElementsByClassName('chat-container')
-      container.scrollTop = container.scrollHeight
+      allChats = [{ role: 'gemini', content: response.text() }, ...allChats]
+      setMessages(allChats)
 
       nativeSpeak(response.text())
     } catch(e) {
-      setConnState("calling gemini - fail")
+      setConnState(`calling gemini - fail: ${e}`)
+      isGenaiAsking = false
 
     }
     isGenaiAsking = false
@@ -189,18 +175,22 @@ export default function Evw() {
   const [vanguardChatRoom, setVanguardChatRoom] = useState({})
   const [chatMessages, setChatMessages] = useState([])
 
-  async function fetchLiveEventDetail() {
-    const response = await ApiFetchLiveEventDetail(SLUG)
+  async function fetchLiveEventDetail(slug) {
+    const response = await ApiFetchLiveEventDetail(slug)
     const body = await response.json()
-    console.warn(SLUG, body.data)
     setLiveEventDeail(body.data)
     setConnState("live data loaded")
   }
 
   useEffect(() => {
-    fetchLiveEventDetail()
+    appStarted = false
+    var slug = DEFAULT_SLUG
+    if (searchParams.get("slug") && searchParams.get("slug") !== "") {
+      slug = searchParams.get("slug")
+    }
+    fetchLiveEventDetail(slug)
     // eslint-disable-next-line
-  }, [])
+  }, [searchParams])
 
   useEffect(() => {
     if (!liveEventDetail || !liveEventDetail?.guard_url) { return }
@@ -293,6 +283,7 @@ export default function Evw() {
         }
       }
       chatWS.current.onmessage = (e) => {
+        setConnState("connected to chat")
         e.preventDefault()
         handleChatWSIncomingMessage(e.data)
       }
@@ -302,18 +293,22 @@ export default function Evw() {
     }
 
     function handleChatWSIncomingMessage(data) {
-      console.warn("INCOMING handleChatWSIncomingMessage", data)
+      // console.warn("INCOMING handleChatWSIncomingMessage", data)
 
       try {
         var parsedData = JSON.parse(data)
         if (!parsedData) { return }
         if (parsedData.ct === 20) {
-          // console.warn("PARSED_CHAT", parsedData)
-          // setChatMessages(chatMessages => [...chatMessages, parsedData])
+          if (!appStarted) {
+            return
+          }
+
+          console.warn("PARSED_CHAT", parsedData)
           setConnState("idle")
-          submitMessage(parsedData.msg)
-          setUserInput(parsedData.msg)
-          // window.scrollTo(0,document.body.scrollHeight)
+          ProcessMessage(parsedData.msg)
+          allChats = [{ role: 'user', content: parsedData.msg }, ...allChats]
+
+          setMessages(allChats)
         }
       } catch(error) {
         console.warn("ERROR handleChatWSIncomingMessage", error)
@@ -321,79 +316,68 @@ export default function Evw() {
     }
   }
 
-  const [playerPlaying, setPlayerPlaying] = useState(false)
+  var vidHeight = "600px"
+
   return (
-    <div className="container mx-auto p-4">
-      <div className='flex-col gap-1'>
-        <div className='w-full relative'>
-          <div className='w-full rounded-lg overflow-hidden border border-black'>
-            {avatarActiveVid !== '' && <ReactPlayer
-              ref={playerRef}
-              onReady={()=>{
-              }}
-              url={avatarActiveVid}
-              width={"100%"}
-              height={"100%"}
-              playing={playerPlaying}
-              loop={true}
-            />}
-          </div>
-          <button
-            className='absolute left-10 top-10 rounded bg-red-500 bg-opacity-100 px-4 py-2'
-            onClick={()=>setPlayerPlaying(!playerPlaying)}
-          >
-            <span className='text-white text-center'>{connState}</span>
-          </button>
-          <button
-            className='absolute left-[300px] top-10 rounded bg-red-500 bg-opacity-100 px-4 py-2'
-            onClick={()=>setPlayerPlaying(!playerPlaying)}
-          >
-            <span className='text-white text-center'>{userInput}</span>
-          </button>
-        </div>
-
-        <div className='w-full max-w-xs'>
-          <div id="chatbox" className="chat-container h-96 overflow-y-auto p-4 bg-gray-100 rounded-lg">
-            {messages.map((message, index) => (
-              <div
-                key={index+message}
-                className={`text-black chat-message mb-2 ${
-                  message.role === 'user' ? 'text-right text-blue-500' : 'text-left text-black'
-                }`}
-              >
-                <p>
-                  <span className="font-bold">{message.role}</span>
-                </p>
-                <p className='text-xs'>
-                  {message.content}
-                </p>
+    <div className="container mx-auto w-full max-w-lg p-2">
+      <div className='flex flex-col gap-1'>
+        <div className='w-full mb-2'>
+          <div className='w-full rounded-lg overflow-hidden border border-black relative h-[600px]'>
+            <div className={`scale-[2.8]`}>
+              <ReactPlayerCsr
+                url={'/videos/ai-idle.m3u8'}
+                width={"100%"}
+                height={vidHeight}
+                playing={playing}
+                loop={true}
+              />
+            </div>
+            <div className={`scale-[2.8] absolute top-0 transition-opacity ease-in duration-700 ${avatarState === 'talk' ? 'opacity-100' : 'opacity-0'}`}>
+              <ReactPlayerCsr
+                url={'/videos/ai-talk.m3u8'}
+                width={"100%"}
+                height={vidHeight}
+                playing={playing}
+                loop={true}
+              />
+            </div>
+            <div className='absolute top-2 right-2'>
+              <div className='flex gap-2'>
+                {!playing && <div className='bg-white p-2 rounded-lg' onClick={()=>{
+                  setPlaying(true)
+                  appStarted=true
+                }}>
+                  Start
+                </div>}
+                {/* <div className='bg-white p-2 rounded-lg'>
+                  {avatarState} - {connState}
+                </div> */}
               </div>
-            ))}
-          </div>
-
-          <form onSubmit={handleSubmit} className="flex mt-4">
-            <input
-              type="text"
-              className="flex-grow border border-gray-300 rounded-l-md p-2 focus:outline-none"
-              placeholder="Type your message..."
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-            />
-            <button
-              type="submit"
-              className="bg-blue-500 text-white rounded-r-md px-4 py-2 hover:bg-blue-600"
-            >
-              Send
-            </button>
-          </form>
-
-          <div className='flex flex-col gap-1 mt-2 text-black'>
-            {voices.map((v, idx)=>(
-              v.lang !== "id-ID" ? null :
-              <div className='bg-white rounded-lg p-1' key={v.lang+v.name}>
-                {idx}: {v.lang} - {v.name}
+            </div>
+            <div className='absolute bottom-0 w-full'>
+              <div className="w-full overflow-y-auto p-4 rounded-lg">
+                {messages.slice(0, 2).map((message, index) => (
+                  <div
+                    key={index+message}
+                    className={`text-black chat-message mb-2 ${
+                      message.role === 'user' ? 'text-right text-blue-500' : 'text-left text-black'
+                    }`}
+                  >
+                    <p>
+                      <span className="font-bold">
+                        {message.role === 'user' ? '🙂 ' : '🤖 '}
+                        {message.role}
+                      </span>
+                    </p>
+                    <div className={message.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+                      <p className='text-xs bg-white bg-opacity-70 p-2 rounded-lg max-w-xs shadow-sm max-h-28 overflow-auto'>
+                        {message.content}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
           </div>
         </div>
       </div>
