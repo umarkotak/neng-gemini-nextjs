@@ -184,13 +184,16 @@ export default function Evw() {
 
   useEffect(() => {
     appStarted = false
+    // eslint-disable-next-line
+  }, [])
+
+  function InitApp() {
     var slug = DEFAULT_SLUG
     if (searchParams.get("slug") && searchParams.get("slug") !== "") {
       slug = searchParams.get("slug")
     }
     fetchLiveEventDetail(slug)
-    // eslint-disable-next-line
-  }, [searchParams])
+  }
 
   useEffect(() => {
     if (!liveEventDetail || !liveEventDetail?.guard_url) { return }
@@ -346,6 +349,7 @@ export default function Evw() {
                 {!playing && <div className='bg-white p-2 rounded-lg' onClick={()=>{
                   setPlaying(true)
                   appStarted=true
+                  InitApp()
                 }}>
                   Start
                 </div>}
